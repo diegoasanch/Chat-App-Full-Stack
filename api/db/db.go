@@ -27,5 +27,15 @@ func ConnectDB() {
 }
 
 func migrateDB() {
-	DB.AutoMigrate(&Message{})
+	dbModels := []interface{}{
+		&Message{},
+		&User{},
+	}
+
+	for _, model := range dbModels {
+		if err := DB.AutoMigrate(model); err != nil {
+			panic("failed to migrate database:\n" + err.Error())
+		}
+	}
+
 }
