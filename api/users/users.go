@@ -4,10 +4,8 @@ import (
 	"chat-app/api/db"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -54,39 +52,28 @@ type LoginBody struct {
 }
 func login(c *gin.Context) {
 	body := LoginBody{}
-	if err := c.BindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{ "status": "error" })
-		return
-	}
-	if body.Email == "" || body.Password == "" {
+	if err := c.BindJSON(&body); err != nil || body.Email == "" || body.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{ "status": "error", "message": "Invalid payload" })
 		return
 	}
+
 	var user db.User
 	result := db.DB.Where("email = ?", body.Email).First(&user)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": result.Error.Error() })
 		return
 	}
-	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{ "status": "error", "message": "Invalid credentials" })
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{ "status": "error", "message": "Incorrect password" })
 		return
 	}
 
-	hmacSampleSecret := []byte("secretCode")
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": user.BaseDbModel.ID,
-		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(time.Hour * 24).Unix(),
-	})
-
-	tokenString, err := token.SignedString(hmacSampleSecret)
+	token, err := CreateUserToken(&user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": "Error signing token" })
+		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": "Error Creating token" })
 		fmt.Println(err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "User logged in", "token": tokenString })
+	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "User logged in", "token": token })
 }
