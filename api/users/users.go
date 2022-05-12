@@ -43,7 +43,7 @@ func createUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": result.Error.Error() })
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "User created", "userId":  user.BaseDbModel.ID  })
+	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "User created", "userId":  user.ID  })
 }
 
 type LoginBody struct {

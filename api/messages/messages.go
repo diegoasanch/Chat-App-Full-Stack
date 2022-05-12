@@ -2,12 +2,14 @@ package messages
 
 import (
 	"chat-app/api/db"
+	"chat-app/api/users"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func MessageRoutes(router *gin.RouterGroup) {
+	router.Use(users.AuthMiddleware)
 	router.POST("/", createMessage)
 	router.GET("/", getMessages)
 	router.POST("/delete", deleteMessage)
@@ -18,11 +20,13 @@ type CreateMessageBody struct {
 }
 func createMessage(c *gin.Context) {
 	body := CreateMessageBody{}
+	user := c.MustGet("user").(db.User)
+
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{ "status": "error", "message": "Invalid request" })
 		return
 	}
-	result := db.DB.Create(&db.Message{ Message: body.Message, UserId: "abc" })
+	result := db.DB.Create(&db.Message{ Message: body.Message, UserId: user.ID })
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": result.Error.Error() })
 		return
@@ -33,7 +37,7 @@ func createMessage(c *gin.Context) {
 
 func getMessages(c *gin.Context) {
 	var messages []db.Message
-	db.DB.Model(&db.Message{}).Find(&messages).Limit(5).Order("created_at desc")
+	db.DB.Preload("User").Model(&db.Message{}).Find(&messages).Limit(5).Order("created_at desc")
 
 	c.JSON(http.StatusOK, gin.H{
 		"messages": messages,
@@ -45,6 +49,7 @@ type DeleteMessageBody struct {
 }
 func deleteMessage(c *gin.Context) {
 	body := DeleteMessageBody{}
+
 
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{ "message": "Invalid body" })
