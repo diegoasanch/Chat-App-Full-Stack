@@ -15,7 +15,7 @@ type Message struct {
 	BaseDbModel BaseDbModel `gorm:"embedded"`
 	Message string `json:"message"`
 	UserId string `json:"user_id"`
-	User User `gorm:"foreignKey:UserId" json:"user"`
+	User User `gorm:"foreignKey:UserId;constraint:CnDelete:CASCADE" json:"user"`
 }
 
 type User struct {
@@ -23,7 +23,6 @@ type User struct {
 	Name string `json:"name"`
 	Email string `gorm:"unique" json:"email"`
 	Password string `json:"password"`
-	Salt string `json:"salt"`
 
-	Messages []Message `gorm:"foreignkey:UserId"`
+	Messages []Message
 }

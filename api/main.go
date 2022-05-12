@@ -3,6 +3,7 @@ package main
 import (
 	"chat-app/api/db"
 	"chat-app/api/messages"
+	"chat-app/api/users"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ func main() {
 	v1.GET("/health", health)
 
 	messages.MessageRoutes(v1.Group("/messages"))
+	users.UserRoutes(v1.Group("/users"))
 
 	router.Run(fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")))
 }
