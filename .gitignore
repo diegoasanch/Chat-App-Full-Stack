@@ -1,0 +1,6 @@
+db/data/*
+
+.env.local
+.env.dev
+.env.production
+
