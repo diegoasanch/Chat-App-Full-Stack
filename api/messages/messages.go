@@ -22,7 +22,11 @@ func createMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{ "status": "error", "message": "Invalid request" })
 		return
 	}
-	db.DB.Create(&db.Message{ Message: body.Message,  })
+	result := db.DB.Create(&db.Message{ Message: body.Message, UserId: "abc" })
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": result.Error.Error() })
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "Message created" })
 }
