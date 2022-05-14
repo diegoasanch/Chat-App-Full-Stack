@@ -14,7 +14,7 @@ import (
 
 func main() {
 	configureEnvironment()
-	db.ConnectDB()
+	db.ConnectDB(db.INIT_ATTEMPT_COUNT)
 
 	router := gin.Default()
 	v1 := router.Group("/api/v1")
