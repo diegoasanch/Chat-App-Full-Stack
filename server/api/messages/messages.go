@@ -1,8 +1,8 @@
 package messages
 
 import (
-	"chat-app/api/db"
-	"chat-app/api/users"
+	"chat-app/server/api/users"
+	"chat-app/server/db"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -26,13 +26,14 @@ func createMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{ "status": "error", "message": "Invalid request" })
 		return
 	}
-	result := db.DB.Create(&db.Message{ Message: body.Message, UserId: user.ID })
+	message := db.Message{ Message: body.Message, UserId: user.ID }
+	result := db.DB.Create(&message)
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": result.Error.Error() })
+		c.JSON(http.StatusInternalServerError, gin.H{ "status": "error", "message": message.ID })
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "Message created" })
+	c.JSON(http.StatusOK, gin.H{ "status": "ok", "message": "Message created", "messageId": result.RowsAffected })
 }
 
 func getMessages(c *gin.Context) {

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"chat-app/api/db"
-	"chat-app/api/messages"
-	"chat-app/api/users"
+	"chat-app/server/api"
+	"chat-app/server/db"
+	ws "chat-app/server/webSocket"
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -14,20 +13,15 @@ import (
 
 func main() {
 	configureEnvironment()
-	db.ConnectDB(db.INIT_ATTEMPT_COUNT)
+	db.Initialize()
 
 	router := gin.Default()
-	v1 := router.Group("/api/v1")
-	v1.GET("/health", health)
-
-	messages.MessageRoutes(v1.Group("/messages"))
-	users.UserRoutes(v1.Group("/users"))
+	ws.WebSocketConnections(router.Group("/ws"))
+	api.ApiRoutes(router.Group("/api"))
 
 	router.Run(fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")))
-}
 
-func health(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{ "status": "Ok", "message": "Server is running :) " })
+	defer cleanup()
 }
 
 func configureEnvironment() {
@@ -40,5 +34,14 @@ func configureEnvironment() {
 	gin.SetMode(ginMode)
 	if err != nil {
 		panic("Error loading .env:\n%s" + err.Error())
+	}
+}
+
+func cleanup() {
+	if r := recover(); r != nil {
+		fmt.Printf("\n\n---- Web server paniced ----\n\nPanic:\n")
+		fmt.Println(r)
+		fmt.Println("---- ---- ---- ----")
+		panic(r)
 	}
 }

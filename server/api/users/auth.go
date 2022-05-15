@@ -1,7 +1,7 @@
 package users
 
 import (
-	"chat-app/api/db"
+	"chat-app/server/db"
 	"fmt"
 	"net/http"
 	"os"
