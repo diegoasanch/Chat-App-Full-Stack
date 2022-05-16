@@ -14,9 +14,11 @@ import (
 func main() {
 	configureEnvironment()
 	db.Initialize()
+	hub := ws.NewHub()
+	go hub.Run()
 
 	router := gin.Default()
-	ws.WebSocketConnections(router.Group("/ws"))
+	ws.WebSocketConnections(router.Group("/ws"), hub)
 	api.ApiRoutes(router.Group("/api"))
 
 	router.Run(fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")))
