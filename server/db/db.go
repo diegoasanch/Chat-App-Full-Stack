@@ -30,12 +30,13 @@ func ConnectDB(attempt int) {
 
 	// Retry up to MAX_CONNECTION_TRIES times
 	if err != nil {
-		fmt.Printf("failed to connect to database:\n%s", err.Error())
+		fmt.Printf("attempt: %d, failed to connect to database:\n%s", attempt, err.Error())
 		if attempt < MAX_CONNECTION_TRIES {
-			time.Sleep(3 * time.Second)
-			defer ConnectDB(attempt + 1)
+			time.Sleep(1 * time.Second)
+			ConnectDB(attempt + 1)
+		} else {
+			panic("failed to connect database")
 		}
-		panic("failed to connect database")
 	}
 
 	DB = db
