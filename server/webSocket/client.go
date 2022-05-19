@@ -6,6 +6,7 @@ package websocket
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -55,10 +56,15 @@ type Client struct {
 }
 
 type WsMessage struct {
-	Message string `json:"message"`
-	ChannelId string `json:"channel_id"`
+	RoomId string `json:"room_id"`
 	Type string `json:"type"`
+	Payload interface{} `json:"payload"`
 }
+
+const JOIN_ROOM_REQUEST = "join_room"
+const LEAVE_ROOM_REQUEST = "leave_room"
+const CHAT_MESSAGE = "chat_message"
+const LEAVE_SERVER_REQUEST = "leave_server"
 
 // readPump pumps messages from the websocket connection to the hub.
 //
@@ -67,7 +73,8 @@ type WsMessage struct {
 // reads from this goroutine.
 func (c *Client) readPump() {
 	defer func() {
-		c.hub.unregister <- c
+		fmt.Println("[client]: readPump exit")
+		c.hub.unregisterClient <- c
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
@@ -82,10 +89,37 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+		jsonMessage := WsMessage{}
 
-		fmt.Println("Received message: ", message)
+		jsonErr := json.Unmarshal(message, &jsonMessage)
+		if jsonErr != nil {
+			log.Println(jsonErr)
+			continue
+		}
 
-		c.hub.broadcast <- &WsMessage{ Message: string(message), ChannelId: "Tst", Type: "message" }
+		switch (jsonMessage.Type) {
+		case JOIN_ROOM_REQUEST:
+			fmt.Println("[client]: Join room request")
+			c.hub.registerRoom <- &ConnectionRequest{
+				RoomId: jsonMessage.RoomId,
+				Client: c,
+			}
+		case LEAVE_ROOM_REQUEST:
+			fmt.Println("[client]: Leave room request")
+			c.hub.unregisterRoom <- &ConnectionRequest{
+				RoomId: jsonMessage.RoomId,
+				Client: c,
+			}
+		case CHAT_MESSAGE:
+			fmt.Println("[client]: Chat message")
+			c.hub.broadcast <- &BroadcastRequest{
+					RoomId: jsonMessage.RoomId,
+					Message: &jsonMessage,
+			}
+		case LEAVE_SERVER_REQUEST:
+			fmt.Println("[client]: Leave server request")
+			c.hub.unregisterClient <- c
+		}
 	}
 }
 
@@ -97,36 +131,27 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		fmt.Println("[client]: writePump exit")
 		ticker.Stop()
 		c.conn.Close()
 	}()
 	for {
 		select {
 		case message, ok := <-c.send:
-			fmt.Println("Sending message: ", message)
+			fmt.Println("[client]: Sending message: ", message)
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
+				fmt.Println("[client]: Not ok, The hub closed the channel")
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-
-			//
-			if err := c.conn.WriteJSON(message);  err != nil {
+			err := c.conn.WriteJSON(message)
+			if err != nil {
+				fmt.Println("[client]: Error sending message: ", err)
 				return
 			}
-			// w.Write(message)
 
-			// Add queued chat messages to the current websocket message.
-			// n := len(c.send)
-			// for i := 0; i < n; i++ {
-			// 	w.Write(newline)
-			// 	w.Write(<-c.send)
-			// }
-
-			// if err := w.Close(); err != nil {
-			// 	return
-			// }
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -144,10 +169,9 @@ func serveWs(c *gin.Context, hub *Hub) {
 		return
 	}
 	client := &Client{hub: hub, conn: conn, send: make(chan interface{}, 256)}
-	client.hub.register <- client
-
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
 	go client.writePump()
-	go client.readPump()
+	client.readPump()
+	defer conn.Close()
 }

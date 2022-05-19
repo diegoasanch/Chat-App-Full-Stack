@@ -9,50 +9,79 @@ import "fmt"
 // Hub maintains the set of active clients and broadcasts messages to the
 // clients.
 type Hub struct {
-	// Registered clients.
-	clients map[*Client]bool
+	// Live rooms, keyed by room id.
+	rooms map[string]*Room
 
 	// Inbound messages from the clients.
-	broadcast chan interface{}
+	broadcast chan *BroadcastRequest
 
 	// Register requests from the clients.
-	register chan *Client
+	registerRoom chan *ConnectionRequest
 
 	// Unregister requests from clients.
-	unregister chan *Client
+	unregisterRoom chan *ConnectionRequest
+
+	// Unregister requests from clients.
+	unregisterClient chan *Client
+
+}
+
+type ConnectionRequest struct {
+	RoomId string `json:"room_id"`
+	Client *Client `json:"-"`
+}
+type BroadcastRequest struct {
+	RoomId string `json:"room_id"`
+	Message *WsMessage `json:"message"`
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan interface{}),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		broadcast:        make(chan *BroadcastRequest),
+		registerRoom:     make(chan *ConnectionRequest),
+		unregisterRoom:   make(chan *ConnectionRequest),
+		unregisterClient: make(chan *Client),
+		rooms:            make(map[string]*Room),
 	}
 }
 
 func (h *Hub) Run() {
-	fmt.Println("Starting hub goroutine")
+	fmt.Println("[hub]: Starting hub goroutine")
+	defer fmt.Println("[hub]: Stopping hub goroutine")
 	for {
 		select {
-		case client := <-h.register:
-			fmt.Println("Registering client")
-			h.clients[client] = true
-		case client := <-h.unregister:
-			fmt.Println("Unregistering client")
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
+		case registerRequest := <-h.registerRoom:
+			fmt.Println("[hub]: Register Room")
+			room, exists := h.rooms[registerRequest.RoomId]
+			if exists {
+				fmt.Printf("[hub]: Room %s already exists\n", registerRequest.RoomId)
+			} else {
+				fmt.Printf("[hub]: Creating room: %s\n", registerRequest.RoomId)
+				room = NewRoom(h)
+				room.RoomId = registerRequest.RoomId
+				h.rooms[room.RoomId] = room
+				go room.Run()
 			}
+			room.register <- registerRequest.Client
+		case unregisterRequest := <-h.unregisterRoom:
+			fmt.Println("[hub]: Unregister Room")
+			if room, ok := h.rooms[unregisterRequest.RoomId]; ok {
+				room.unregister <- unregisterRequest.Client
+			}
+		case unregisterRequest := <-h.unregisterClient:
+			fmt.Println("[hub]: Unregister Client")
+			for _, room := range h.rooms {
+				room.unregister <- unregisterRequest
+			}
+			unregisterRequest.conn.Close()
+			close(unregisterRequest.send)
 		case message := <-h.broadcast:
-			fmt.Println("Broadcasting message")
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(h.clients, client)
-				}
+			fmt.Println("[hub]: Broadcast message")
+			if room, ok := h.rooms[message.RoomId]; ok {
+				fmt.Printf("[hub]: Broadcasting message to room: %s\n", message.RoomId)
+				room.broadcast <- message.Message
+			} else {
+				fmt.Printf("[hub]: Room %s does not exist\n", message.RoomId)
 			}
 		}
 	}
