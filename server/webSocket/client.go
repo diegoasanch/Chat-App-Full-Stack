@@ -39,7 +39,7 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,    //check origin will check the cross region source (note : please not using in production)
 	CheckOrigin: func(r *http.Request) bool {
-        //Here we just allow the chrome extension client accessable (you should check this verify accourding your client source)
+        // TODO: Restrict the origin to our addresses
 		return true
 	},
 }
@@ -56,6 +56,7 @@ type Client struct {
 }
 
 type WsMessage struct {
+	Owner *Client `json:"owner"`
 	RoomId string `json:"room_id"`
 	Type string `json:"type"`
 	Payload interface{} `json:"payload"`
@@ -91,11 +92,11 @@ func (c *Client) readPump() {
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 		jsonMessage := WsMessage{}
 
-		jsonErr := json.Unmarshal(message, &jsonMessage)
-		if jsonErr != nil {
+		if jsonErr := json.Unmarshal(message, &jsonMessage); jsonErr != nil {
 			log.Println(jsonErr)
 			continue
 		}
+		jsonMessage.Owner = c
 
 		switch (jsonMessage.Type) {
 		case JOIN_ROOM_REQUEST:
