@@ -24,8 +24,8 @@ type Hub struct {
 	// Unregister requests from clients.
 	unregisterClient chan *Client
 
+	hubCommand chan *HubCommand
 }
-
 type ConnectionRequest struct {
 	RoomId string `json:"room_id"`
 	Client *Client `json:"-"`
@@ -35,54 +35,102 @@ type BroadcastRequest struct {
 	Message *WsMessage `json:"message"`
 }
 
+type HubCommand struct {
+	Command string
+	Params map[string]interface{}
+}
+
+const H_EXIT = "exit"
+
+
 func NewHub() *Hub {
 	return &Hub{
 		broadcast:        make(chan *BroadcastRequest),
 		registerRoom:     make(chan *ConnectionRequest),
 		unregisterRoom:   make(chan *ConnectionRequest),
 		unregisterClient: make(chan *Client),
+		hubCommand: 	  make(chan *HubCommand),
 		rooms:            make(map[string]*Room),
 	}
 }
 
 func (h *Hub) Run() {
 	fmt.Println("[hub]: Starting hub goroutine")
-	defer fmt.Println("[hub]: Stopping hub goroutine")
+	defer func() {
+		fmt.Println("[hub]: Stopping hub goroutine")
+		close(h.broadcast)
+		close(h.registerRoom)
+		close(h.unregisterRoom)
+		close(h.unregisterClient)
+		for _, room := range h.rooms {
+			room.unregister <- nil
+		}
+	}()
+
 	for {
 		select {
 		case registerRequest := <-h.registerRoom:
-			fmt.Println("[hub]: Register Room")
-			room, exists := h.rooms[registerRequest.RoomId]
-			if exists {
-				fmt.Printf("[hub]: Room %s already exists\n", registerRequest.RoomId)
-			} else {
-				fmt.Printf("[hub]: Creating room: %s\n", registerRequest.RoomId)
-				room = NewRoom(h)
-				room.RoomId = registerRequest.RoomId
-				h.rooms[room.RoomId] = room
-				go room.Run()
-			}
-			room.register <- registerRequest.Client
+			h.RegisterRoom(registerRequest)
 		case unregisterRequest := <-h.unregisterRoom:
-			fmt.Println("[hub]: Unregister Room")
-			if room, ok := h.rooms[unregisterRequest.RoomId]; ok {
-				room.unregister <- unregisterRequest.Client
-			}
+			h.UnregisterRoom(unregisterRequest)
 		case unregisterRequest := <-h.unregisterClient:
-			fmt.Println("[hub]: Unregister Client")
-			for _, room := range h.rooms {
-				room.unregister <- unregisterRequest
-			}
-			unregisterRequest.conn.Close()
-			close(unregisterRequest.send)
-		case message := <-h.broadcast:
-			fmt.Println("[hub]: Broadcast message")
-			if room, ok := h.rooms[message.RoomId]; ok {
-				fmt.Printf("[hub]: Broadcasting message to room: %s\n", message.RoomId)
-				room.broadcast <- message.Message
-			} else {
-				fmt.Printf("[hub]: Room %s does not exist\n", message.RoomId)
+			h.UnregisterClient(unregisterRequest)
+		case broadcastRequest := <-h.broadcast:
+			h.Broadcast(broadcastRequest.Message)
+		case hubCommand := <-h.hubCommand:
+			if (hubCommand.Command == H_EXIT) {
+				fmt.Println("[hub]: Exiting hub")
+				return
 			}
 		}
 	}
+}
+
+func (h *Hub) Broadcast(message *WsMessage) {
+	fmt.Println("[hub]: Broadcast message")
+	if room, ok := h.rooms[message.RoomId]; ok {
+		fmt.Printf("[hub]: Broadcasting message to room: %s\n", message.RoomId)
+		room.broadcast <- message
+	} else {
+		fmt.Printf("[hub]: Room %s does not exist\n", message.RoomId)
+		message.Owner.send <- &WsMessage{
+			Type: "server_error",
+			Payload: "Room does not exist",
+			RoomId: message.RoomId,
+		}
+	}
+}
+
+func (h *Hub) RegisterRoom(registerRequest *ConnectionRequest) {
+	fmt.Println("[hub]: Register Room")
+	room, exists := h.rooms[registerRequest.RoomId]
+	if !exists {
+		fmt.Printf("[hub]: Creating room: %s\n", registerRequest.RoomId)
+		room = NewRoom(h)
+		room.RoomId = registerRequest.RoomId
+		h.rooms[room.RoomId] = room
+		go room.Run()
+	}
+	room.register <- registerRequest.Client
+}
+
+func (h *Hub) UnregisterRoom(unregisterRequest *ConnectionRequest) {
+	fmt.Println("[hub]: Unregister Room")
+	if room, exists := h.rooms[unregisterRequest.RoomId]; exists {
+		room.unregister <- unregisterRequest.Client
+	}
+}
+
+func (h *Hub) UnregisterClient(toUnregister *Client) {
+	fmt.Println("[hub]: Unregister Client")
+	for _, room := range h.rooms {
+		room.unregister <- toUnregister
+	}
+	toUnregister.conn.Close()
+	close(toUnregister.send)
+}
+
+func (h *Hub) DeleteRoom(roomId string) {
+	fmt.Println("[hub]: Deleting room: ", roomId)
+	delete(h.rooms, roomId)
 }
