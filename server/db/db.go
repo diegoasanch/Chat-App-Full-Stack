@@ -9,9 +9,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// Global DB connection
 var DB *gorm.DB
 
-const MAX_CONNECTION_TRIES = 3
+const MAX_CONNECTION_TRIES = 10
 const INIT_ATTEMPT_COUNT = 0
 
 func Initialize() {
@@ -26,20 +27,22 @@ func ConnectDB(attempt int) {
 	dbPort := os.Getenv("POSTGRES_PORT")
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s port=%s",dbHost, dbUser, dbPassword, dbPort)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{  })
 
 	// Retry up to MAX_CONNECTION_TRIES times
 	if err != nil {
-		fmt.Printf("failed to connect to database:\n%s", err.Error())
+		fmt.Printf("attempt: %d, failed to connect to database:\n", attempt)
 		if attempt < MAX_CONNECTION_TRIES {
-			time.Sleep(3 * time.Second)
-			defer ConnectDB(attempt + 1)
+			time.Sleep(500 * time.Millisecond)
+			ConnectDB(attempt + 1)
+		} else {
+			fmt.Println("failed to connect to database", err.Error())
+			panic("failed to connect database")
 		}
-		panic("failed to connect database")
 	}
 
-	DB = db
 	migrateDB(db)
+	DB = db
 }
 
 func migrateDB(db *gorm.DB) {

@@ -1,24 +1,18 @@
-package ws
+package websocket
 
 import (
 	"fmt"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 )
 
-func WebSocketConnections(router *gin.RouterGroup) {
+func WebSocketConnections(router *gin.RouterGroup, hub *Hub) {
+	router.GET("/", func (c *gin.Context) {
+		serveWs(c, hub)
+	})
 	router.GET("/test", wsTest)
 }
 
-var upgrader = websocket.Upgrader{
-    //check origin will check the cross region source (note : please not using in production)
-	CheckOrigin: func(r *http.Request) bool {
-        //Here we just allow the chrome extension client accessable (you should check this verify accourding your client source)
-		return true
-	},
-}
 
 func wsTest(c *gin.Context) {
 	//upgrade get request to websocket protocol
