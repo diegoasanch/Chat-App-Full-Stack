@@ -1,11 +1,11 @@
-// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package websocket
+
+// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
+// Use of this source code is governed by a BSD-s// license that can be found in the LICENSE file.
 
 import (
 	"bytes"
+	"chat-app/server/db"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -53,10 +53,14 @@ type Client struct {
 
 	// Buffered channel of outbound messages.
 	send chan interface{}
+
+	// The user of the logged client
+	ownerUser *db.User
 }
 
 type WsMessage struct {
 	Owner *Client `json:"owner"`
+	OwnerUser *db.User `json:"owner_user"`
 	RoomId string `json:"room_id"`
 	Type string `json:"type"`
 	Payload interface{} `json:"payload"`
@@ -97,6 +101,7 @@ func (c *Client) readPump() {
 			continue
 		}
 		jsonMessage.Owner = c
+		jsonMessage.OwnerUser = c.ownerUser
 
 		switch (jsonMessage.Type) {
 		case JOIN_ROOM_REQUEST:
@@ -169,7 +174,14 @@ func serveWs(c *gin.Context, hub *Hub) {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan interface{}, 256)}
+	ownerUser := c.MustGet("user").(db.User)
+
+	client := &Client{
+		hub: hub,
+		conn: conn,
+		send: make(chan interface{}, 256),
+		ownerUser: &ownerUser,
+	}
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
 	go client.writePump()
