@@ -18,8 +18,11 @@ func main() {
 	go hub.Run()
 
 	router := gin.Default()
-	ws.WebSocketConnections(router.Group("/ws"), hub)
-	api.ApiRoutes(router.Group("/api"))
+	webSocketGroup := router.Group("/ws", AuthMiddleware)
+	apiGroup := router.Group("/api")
+
+	ws.WebSocketConnections(webSocketGroup, hub)
+	api.ApiRoutes(apiGroup, AuthMiddleware)
 
 	router.Run(fmt.Sprintf("0.0.0.0:%s", os.Getenv("PORT")))
 

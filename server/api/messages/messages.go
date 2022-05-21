@@ -1,7 +1,6 @@
 package messages
 
 import (
-	"chat-app/server/api/users"
 	"chat-app/server/db"
 	"net/http"
 
@@ -9,7 +8,6 @@ import (
 )
 
 func MessageRoutes(router *gin.RouterGroup) {
-	router.Use(users.AuthMiddleware)
 	router.POST("/", createMessage)
 	router.GET("/", getMessages)
 	router.POST("/delete", deleteMessage)

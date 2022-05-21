@@ -8,12 +8,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ApiRoutes(router *gin.RouterGroup) {
+
+func ApiRoutes(router *gin.RouterGroup, authMiddleWare gin.HandlerFunc) {
 	v1 := router.Group("/v1")
 	v1.GET("/health", health)
 
-	messages.MessageRoutes(v1.Group("/messages"))
 	users.UserRoutes(v1.Group("/users"))
+
+	protecterRoutes := v1.Group("/", authMiddleWare)
+	messagesRouter := protecterRoutes.Group("/messages")
+	messages.MessageRoutes(messagesRouter)
 }
 
 func health(c *gin.Context) {
